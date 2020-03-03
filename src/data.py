@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Preprocessing on the alignment dataset.
+Preprocessing on the alignment dataset and
+processing for tsv output.
 """
 
 
 import os
+import csv
+import itertools
 from ast import literal_eval
 import pickle
 import pandas as pd
@@ -66,9 +69,21 @@ def merge_score(alignments, file):
 	return df
 
 
+def read_metadata(metadata_file):
+	df = pd.read_csv(metadata_file, header=0)
+	df.index = df['FILE']
+	d = df.to_dict()
+	result = d['TRANSCRIBER']
+	result = {k + ".trans": v for k, v in result.items()}
+	return result
+	
+
 def preprocess(config, logger):
 	logger.info('Loading {}'.format(config['alignments_file']))
 	alignments = read_tsv(config['alignments_file'])
+	
+	logger.info('Loading {}'.format(config['metadata_file']))
+	transcribers = read_metadata(config['metadata_file'])
 	
 	# fix turns that have empty label
 	alignments = label_empty_turns(alignments)
@@ -76,6 +91,9 @@ def preprocess(config, logger):
 	# add index for easy search and debugging
 	alignments['file_num'] = alignments['file'].astype(str).str.slice(2, -6)
 	alignments = generate_index(alignments)
+	
+	# add transcriber info
+	alignments['transcriber'] = alignments['file'].apply(lambda x: transcribers[x])
 	
 	for file in os.listdir(config['score_dir']):
 		if file.endswith('_scores.tsv'):
@@ -97,7 +115,29 @@ def load_data(config, logger):
 	
 	if os.path.exists(data_file):
 		logger.info('Loading {}'.format(data_file))
-		return pickle.load(open(data_file, 'rb'))
+		alignments = pickle.load(open(data_file, 'rb'))
+		return alignments
 	else:
 		return preprocess(config, logger)
+		
 
+def sample_results(results, i):
+	header = [i for i in itertools.chain(results[i].get_header(), results[i].ptb.get_header('ptb'), results[i].ms.get_header('ms'))]
+	header = ' '.join(header)
+	value = [i for i in itertools.chain(results[i].get_values(), results[i].ptb.get_values(), results[i].ms.get_values())]
+	value = ' '.join(value)
+
+	return header + '\n' + value
+
+
+def write_tsv(config, logger, results):
+	output = os.path.join(config['project_dir'], 'swb_errors_surprisal.tsv')
+	
+	logger.info('Writing results file to {}'.format(output))
+	writer = csv.writer(open(output, 'w'), delimiter='\t')
+	
+	# write the header
+	writer.writerow([i for i in itertools.chain(results[0].get_header(), results[0].ptb.get_header('ptb'), results[0].ms.get_header('ms'))])
+
+	for item in results:
+		writer.writerow([i for i in itertools.chain(item.get_values(), item.ptb.get_values(), item.ms.get_values())])
