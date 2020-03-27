@@ -17,6 +17,7 @@ def get_config(config_file):
 	with open(config_file, 'r') as stream:
 		return yaml.safe_load(stream)
 
+
 def get_logger(debug):
 	if debug:
 		level = logging.DEBUG
@@ -68,3 +69,23 @@ def get_sup_diff(l1, l2):
 	t1 = sum([math.log2(x) for x in l1])
 	t2 = sum([math.log2(x) for x in l2])
 	return t1/len(l1) - t2/len(l2)
+
+
+def ms_labels():
+	return ['DEL', 'SUB_MS', 'CONT_MS']
+
+
+def ptb_labels():
+	return ['INS', 'SUB_TREE', 'CONT_TREE']
+
+
+def non_error():
+	return 'O'
+
+
+def is_ptb(label):
+	return label in ptb_labels() or label == non_error()
+
+
+def is_ms(label):
+	return label in ms_labels() or label == non_error()
