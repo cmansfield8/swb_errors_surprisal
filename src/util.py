@@ -7,8 +7,10 @@ General useful scripts for error analysis.
 
 import sys
 import logging
+import math
 import yaml
 import pandas as pd
+from errinfo import ErrShape
 
 
 def get_config(config_file):
@@ -60,3 +62,9 @@ def get_token_base(token):
 def is_contraction(token):
 	CONTRACTION_PREFIX = ("\'", "n\'t")
 	return get_token_base(token).startswith(CONTRACTION_PREFIX)
+	
+		
+def get_sup_diff(l1, l2):
+	t1 = sum([math.log2(x) for x in l1])
+	t2 = sum([math.log2(x) for x in l2])
+	return t1/len(l1) - t2/len(l2)
