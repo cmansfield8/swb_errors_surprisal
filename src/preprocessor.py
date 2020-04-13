@@ -27,7 +27,9 @@ def update_ids(sent, tok_ids):
     i = 1
     while i <= len(sent):
         current = (sent[i-1], sent[i]) if i < len(sent) else None
-        if current == YOU_KNOW:
+        if current and current[0] == '---':
+            result.append('None')
+        elif current == YOU_KNOW:
             result.append(tok_ids[i-1] + '_a')
             result.append(tok_ids[i] + '_b')
             i += 1  # skip ahead since appending at i
@@ -48,7 +50,8 @@ def update_names(row, sent_col, tok_ids_col):
     words = set(sent)
     if 'you' in words and 'know' in words or \
             'want' in words and 'to' in words or \
-            'going' in words and 'to' in words:
+            'going' in words and 'to' in words or \
+            '---' in words:
         return update_ids(sent, tok_ids)
     return tok_ids
 
@@ -87,7 +90,7 @@ def update_cont(row):
 
 
 def detokenize(row, sent_col, tok_ids_col):
-    if any([x.endswith('_a') for x in row[tok_ids_col]]):
+    if any([(x.endswith('_a') or x == 'None') for x in row[tok_ids_col]]):
         temp = list()
         i = 0
         while i < len(row[tok_ids_col]):
@@ -100,7 +103,7 @@ def detokenize(row, sent_col, tok_ids_col):
                 else:
                     temp.append(row[sent_col][i]+row[sent_col][i+1])
                 i += 1
-            else:
+            elif label != 'None':
                 temp.append(row[sent_col][i])
             i += 1
         return temp
@@ -130,13 +133,13 @@ def preprocess(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("file",help="original alignments file")
+    parser.add_argument("file", help="original alignments file")
     parser.add_argument("output", help="output file")
     parser.add_argument("-c", "--cont",
                         help="fix style difference between ptb and ms to match ms",
                         action='store_true')
     parser.add_argument("-d", "--detokenize",
-                        help="Combine forms such as ""contractions.",
+                        help="Combine forms such as contractions and remove special chars.",
                         action='store_true')
     args = parser.parse_args()
     preprocess(args)
