@@ -10,7 +10,6 @@ import logging
 import math
 import yaml
 import pandas as pd
-from errinfo import ErrShape
 
 
 def get_config(config_file):
@@ -80,7 +79,7 @@ def ptb_labels():
 
 
 def non_error():
-	return 'O'
+	return 'O' or 'CONT'
 
 
 def is_ptb(label):
