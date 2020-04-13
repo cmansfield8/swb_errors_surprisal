@@ -1,0 +1,5 @@
+alignments_file: "swbd_cont2.tsv"
+project_dir: "exp2"
+nnmodel: "gru-5005"
+
+debug: True
