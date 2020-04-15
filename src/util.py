@@ -78,13 +78,17 @@ def ptb_labels():
 	return ['INS', 'SUB_TREE', 'CONT_TREE']
 
 
-def non_error():
-	return 'O' or 'CONT'
+def non_error(label):
+	return label == 'O' or label == 'CONT'
+
+
+def get_norm_label():
+	return 'O'
 
 
 def is_ptb(label):
-	return label in ptb_labels() or label == non_error()
+	return label in ptb_labels() or non_error(label)
 
 
 def is_ms(label):
-	return label in ms_labels() or label == non_error()
+	return label in ms_labels() or non_error(label)
