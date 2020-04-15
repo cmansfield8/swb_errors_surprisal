@@ -29,8 +29,8 @@ def verify_token(token):
 	return not util.is_contraction(token) and not util.is_special_char(token)
 
 
-def get_col(datatype, ms=True):
-	if ms:
+def get_col(datatype, is_ms=True):
+	if is_ms:
 		data = 'ms'
 	else:
 		data = 'ptb'
@@ -49,6 +49,22 @@ def get_col(datatype, ms=True):
 	return d[(data, datatype)]
 
 
+class ErrorFlags:
+
+	def __init__(self, special_tok=True, prev_error=False, eos=False, split=False, ms_split=False):
+		self.special_tok = special_tok
+		self.prev_error = prev_error
+		self.eos = eos
+		self.ptb_split = split
+		self.ms_split = ms_split
+
+	def reset(self):
+		self.special_tok = False
+		self.eos = False
+		self.ptb_split = False
+		self.ms_split = False
+
+
 class GenerateError:
 
 	def __init__(self, args):
@@ -57,72 +73,78 @@ class GenerateError:
 
 		# load the switchboard file
 		alignment = data.load_data(config, logger)
+		alignment = alignment.head(40)  # TESTING
 		logger.info('Processing errors...')
 
 		err_labels = ['INS', 'DEL', 'SUB_TREE', 'SUB_MS']
-		result = list()
+		result = list()  # list of structured error objects
 
-		# for each slash unit
+		# for each utterance
 		for i, row in alignment.iterrows():
 			self.ix = defaultdict(int)
-
+			self.flags = ErrorFlags()
 			current = ErrSeq()
-			prev_error = False
 
-			# for each part of the alignment
+			# for each token of the alignment
 			for j in range(len(row['comb_ann'])):
+				self.flags.reset()
 				self.ix['ann'] = j
 				label = row['comb_ann'][self.ix['ann']]
 
-				# if it's first part of contraction or special char, do not use
-				# TODO: check if this is too hacky
-				special_tok = False
-				for dtype, cond in [('ptb', False), ('ms', True)]:
-					if self.ix[dtype] < len(row[get_col('name', cond)]):
-						name = row[get_col('name', cond)][self.ix[dtype]]
-						if name == 'None' or name.endswith('_a'):
-							special_tok = True
+				# check special conditions
+				name, ms_name = '', ''
+				if self.ix['ptb'] < len(row[get_col('name', is_ms=False)]):
+					name = row[get_col('name', is_ms=False)][self.ix['ptb']]
+				if self.ix['ms'] < len(row[get_col('name')]):
+					ms_name = row[get_col('name')][self.ix['ms']]
+				if name == 'None' and ms_name == 'None':
+					self.flags.special_tok = True
+				# so we don't dupe tokenized token scores
+				if name.endswith('_a'):
+					self.flags.ptb_split = True
+				if ms_name.endswith('_a'):
+					self.flags.ms_split = True
 
-				if not special_tok:
+				if not self.flags.special_tok:
 					# a new error or another error in current error sequence
 					if label in err_labels:
-						current = self.process_error(i, row, label, current, prev_error)
-						prev_error = True
+						current = self.process_error(i, row, label, current)
+						self.flags.prev_error = True
 
 					# add the token after the error sequence
-					elif prev_error:
-						current = self.process_error(i, row, label, current, prev_error, last=True)
-						current.make_summary()
-						result.append(current)
-						# start fresh
-						prev_error = False
-						current = ErrSeq()
+					elif self.flags.prev_error:
+						current = self.process_error(i, row, label, current)
+						# on to new errors if it's not a split
+						if not self.flags.ptb_split and not self.flags.ms_split:
+							current.make_summary()
+							result.append(current)
+							self.flags.prev_error = False
+							current = ErrSeq()
 
 				if util.is_ptb(label):
 					self.ix['ptb'] += 1
-					if not special_tok:
+					if not self.flags.special_tok and not self.flags.ptb_split:
 						self.ix['ptb_dtok'] += 1
 				if util.is_ms(label):
 					self.ix['ms'] += 1
-					if not special_tok:
+					if not self.flags.special_tok and not self.flags.ms_split:
 						self.ix['ms_dtok'] += 1
 
 			# add an EOS token after the error sequence in needed
-			if prev_error:
-				current = self.process_error(i, row, label, current, prev_error, last=True, eos=True)
+			if self.flags.prev_error:
+				label = util.get_norm_label()
+				self.flags.eos = True
+				current = self.process_error(i, row, label, current)
 				current.make_summary()
 				result.append(current)
-			# start fresh
-			prev_error = False
-			current = ErrSeq()
 
 		logger.info('Error sequences found: {}'.format(str(len(result))))
 		# logger.debug(data.sample_results(result, 0))  TODO: debug
 
 		data.write_tsv(config, logger, result)
 
-	def process_helper(self, i, row, label, current_dtype, eos, ms=True):
-		if ms:
+	def process_helper(self, i, row, current_dtype, is_ms=True):
+		if is_ms:
 			prefix = 'ms_'
 		else:
 			prefix = 'ptb_'
@@ -131,51 +153,52 @@ class GenerateError:
 		token = eos_token
 		shape = Lex.EOS.value
 
-		if not eos:
+		if not self.flags.eos:
 			try:
-				token = row[get_col('token', ms)][self.ix[prefix + 'dtok']]
-				shape = row[get_col('shape', ms)][self.ix[prefix + 'dtok']]
+				token = row[get_col('token', is_ms)][self.ix[prefix + 'dtok']]
+				shape = row[get_col('shape', is_ms)][self.ix[prefix + 'dtok']]
 			except IndexError as e:
-				self.debug_report(e, row, i, label, ms)
+				self.debug_report(e, row, i, is_ms)
 				raise
+
 		current_dtype.set_token(token, shape)
 		current_dtype.set_score(0.40, 0.45)  # placeholder
-		# score = row[get_col('score', ms)][self.ix[prefix + 'ngram_score']]
-		# nn_score = row[get_col('nn_score', ms)][self.ix[prefix + 'nn_score']]
+		# score = row[get_col('score', is_ms)][self.ix[prefix + 'ngram_score']]
+		# nn_score = row[get_col('nn_score', is_ms)][self.ix[prefix + 'nn_score']]
 		# current_dtype.set_score(score, nn_score)
 		return current_dtype
 
-	def process_error(self, i, row, label, current, prev_error, last=False, eos=False):
-
+	def process_error(self, i, row, label, current):
 		# add basic info if it's a new error
-		if not prev_error:
+		if not self.flags.prev_error:
 			current.index = i
 			current.transcriber = row['transcriber']
 
-		# include info related to errors unless it's the following word
-		if not last:
-			current.add_type(row['comb_ann'][self.ix['ann']])
+		# always add annotation info
+		current.add_type(label)
 
 		# it's a ptb-related error or it's the following word
-		if util.is_ptb(label) or last:
-			current.ptb = self.process_helper(i, row, label, current.ptb, eos, ms=False)
+		if util.is_ptb(label) or util.non_error(label):
+			if not self.flags.ptb_split:
+				current.ptb = self.process_helper(i, row, current.ptb, is_ms=False)
 
 		# it's an ms-related error or it's the following word
-		if util.is_ms(label) or last:
-			current.ms = self.process_helper(i, row, label, current.ms, eos, ms=True)
+		if util.is_ms(label) or util.non_error(label):
+			if not self.flags.ms_split:
+				current.ms = self.process_helper(i, row, current.ms)
 
 		return current
 
-	def debug_report(self, e, row, i, label, ms=True):
+	def debug_report(self, e, row, i, ms=True):
 		"""in case of indexing error, includes some useful info"""
 		print('Index: {}'.format(i))
 
 		if ms:
 			label = 'ms'
-		if not ms:
+		else:
 			label = 'ptb'
 
-		print('{} error at label {}'.format(label, row['comb_ann']))
+		print('{} data error at alignment: {}'.format(label, row['comb_ann']))
 		print('PTB Name: {}\n IndexTok: {}'.format(row[get_col('name', ms=False)], self.ix['ptb']))
 		print('PTB Sentence: {}\n IndexDtok: {}'.format(row[get_col('token', ms=False)], self.ix['ptb_dtok']))
 		print('MS Name: {}\n IndexTok: {}'.format(row[get_col('name')], self.ix['ms']))
