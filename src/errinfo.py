@@ -16,6 +16,7 @@ class Err(Enum):
 	MIX = -1
 	INS = 0
 	DEL = 1
+	SUB = 2
 
 	
 class Lex(Enum):
@@ -40,8 +41,9 @@ class Trans:
 			return self.shapes[0]
 		return Lex.MIX.name
 		
-	def set_token(self, token, shape):
-		self.tokens.append(token)
+	def set_token(self, token, shape, split=False):
+		if not split:
+			self.tokens.append(token)
 		self.shapes.append(Lex(int(shape)).name)
 		
 	def set_score(self, ngram_value, nn_value):
@@ -74,12 +76,14 @@ class ErrSeq:
 		self.ms = Trans()
 		
 	def _summarize_type(self):
-		if "INS" in self.error_type and "DEL" in self.error_type:
+		if Err.INS.name in self.error_type and Err.DEL.name in self.error_type:
 			self.avg_type = Err.MIX.name
-		elif "DEL" in self.error_type:
+		elif Err.DEL.name in self.error_type:
 			self.avg_type = Err.DEL.name
-		else:
+		elif Err.INS.name in self.error_type:
 			self.avg_type = Err.INS.name
+		else:
+			self.avg_type = Err.SUB.name
 			
 	def _summarize_shape(self):
 		if self.avg_type == Err.MIX.name:
@@ -91,8 +95,10 @@ class ErrSeq:
 			
 	def _get_surprisal_value(self):
 		s1, s2 = self.ptb, self.ms
-		self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
-		self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
+		self.sup = 1
+		self.nn_sup = 1
+		# self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
+		# self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
 		
 	def make_summary(self):
 		self._summarize_type()
