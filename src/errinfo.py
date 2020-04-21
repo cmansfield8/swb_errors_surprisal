@@ -3,8 +3,6 @@
 """
 Objects used to store and average information about errors.
 
-TODO: calculate_surprisal method
-
 """
 
 
@@ -13,7 +11,6 @@ import util
 
 
 class Err(Enum):
-	MIX = -1
 	INS = 0
 	DEL = 1
 	SUB = 2
@@ -23,7 +20,7 @@ class Lex(Enum):
 	EOS = -2
 	MIX = -1
 	FUNC = 0
-	CONT = 1
+	CON = 1
 	DISC = 2
 	OTHER = 3
 	
@@ -72,38 +69,37 @@ class ErrSeq:
 		self.sup = None
 		self.nn_sup = None
 		self.error_type = list()
+		self.del_edge = False
 		self.ptb = Trans()
 		self.ms = Trans()
 		
 	def _summarize_type(self):
-		if Err.INS.name in self.error_type and Err.DEL.name in self.error_type:
-			self.avg_type = Err.MIX.name
+		if 'SUB_MS' in self.error_type:
+			self.avg_type = Err.SUB.name
 		elif Err.DEL.name in self.error_type:
 			self.avg_type = Err.DEL.name
 		elif Err.INS.name in self.error_type:
 			self.avg_type = Err.INS.name
-		else:
-			self.avg_type = Err.SUB.name
 			
 	def _summarize_shape(self):
-		if self.avg_type == Err.MIX.name:
-			self.avg_shape = Lex.MIX.name
-		elif self.avg_type == Err.INS.name:
-			self.avg_shape = self.ptb.summarize_shape()
+		avg_ptb = self.ptb.summarize_shape()
+		avg_ms = self.ms.summarize_shape()
+		if self.avg_type == Err.INS.name or avg_ptb == avg_ms:
+			self.avg_shape = avg_ptb
+		elif self.avg_type == Err.DEL.name:
+			self.avg_shape = avg_ms
 		else:
-			self.avg_shape = self.ms.summarize_shape()
-			
-	def _get_surprisal_value(self):
+			self.avg_shape = Lex.MIX.name
+
+	def _get_suprisal_value(self):
 		s1, s2 = self.ptb, self.ms
-		self.sup = 1
-		self.nn_sup = 1
-		# self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
-		# self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
-		
+		self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
+		self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
+
 	def make_summary(self):
 		self._summarize_type()
 		self._summarize_shape()
-		self._get_surprisal_value()
+		self._get_suprisal_value()
 	
 	def add_type(self, value):
 		self.error_type.append(value)
