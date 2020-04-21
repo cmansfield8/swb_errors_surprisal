@@ -5,7 +5,6 @@ General useful scripts for error analysis.
 """
 
 
-import sys
 import logging
 import math
 import yaml
@@ -42,11 +41,7 @@ def read_metadata(metadata_file):
 	result = d['TRANSCRIBER']
 	result = {k + ".trans": v for k, v in result.items()}
 	return result
-	
 
-#def is_empty(sent):
-#	return not sent or all([util.is_special_char(x) for x in sent])
-	
 
 def is_special_char(token):
 	return token == '//' or token.startswith('--')
@@ -76,6 +71,10 @@ def ms_labels():
 
 def ptb_labels():
 	return ['INS', 'SUB_TREE', 'CONT_TREE']
+
+
+def err_labels():
+	return ['INS', 'DEL', 'SUB_TREE', 'SUB_MS']
 
 
 def non_error(label):

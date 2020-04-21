@@ -5,28 +5,12 @@ Pull errors from alignment with their surprisal LLR.
 
 """
 
-import sys  # TODO remove after debug
+
 import argparse
 from collections import defaultdict
 import data
 import util
 from errinfo import ErrSeq, Lex
-
-
-def verify_sequence(sequence):
-	return True
-
-
-# if is empty sentence: # make these all enums
-#	return 1
-# elif is end deletion:
-#	return 2
-# elif lif label.startswith('CONT'):
-#	return 3
-
-
-def verify_token(token):
-	return not util.is_contraction(token) and not util.is_special_char(token)
 
 
 def get_col(datatype, is_ms=True):
@@ -45,6 +29,7 @@ def get_col(datatype, is_ms=True):
 		('ms', 'score'): 'ms_scores-ngram',
 		('ptb', 'nn_score'): 'scores-gru',
 		('ms', 'nn_score'): 'ms_scores-gru',
+		('ms', 't-token'): 'ms_sentence'  # tokenized ms sentence
 	}
 	return d[(data, datatype)]
 
@@ -73,11 +58,9 @@ class GenerateError:
 
 		# load the switchboard file
 		alignment = data.load_data(config, logger)
-		alignment = alignment.head(40)  # TESTING
 		logger.info('Processing errors...')
 
-		err_labels = ['INS', 'DEL', 'SUB_TREE', 'SUB_MS']
-		result = list()  # list of structured error objects
+		result = list()	 # list of structured error objects
 
 		# for each utterance
 		for i, row in alignment.iterrows():
@@ -107,7 +90,7 @@ class GenerateError:
 
 				if not self.flags.special_tok:
 					# a new error or another error in current error sequence
-					if label in err_labels:
+					if label in util.err_labels():
 						current = self.process_error(i, row, label, current)
 						self.flags.prev_error = True
 
@@ -139,15 +122,14 @@ class GenerateError:
 				result.append(current)
 
 		logger.info('Error sequences found: {}'.format(str(len(result))))
-		# logger.debug(data.sample_results(result, 0))  TODO: debug
 
 		data.write_tsv(config, logger, result)
 
-	def process_helper(self, i, row, current_dtype, is_ms=True):
+	def process_helper(self, i, row, temp, is_ms=True):
 		if is_ms:
-			prefix = 'ms_'
+			dtype = 'ms'
 		else:
-			prefix = 'ptb_'
+			dtype = 'ptb'
 
 		eos_token = '<EOS>'
 		token = eos_token
@@ -155,18 +137,24 @@ class GenerateError:
 
 		if not self.flags.eos:
 			try:
-				token = row[get_col('token', is_ms)][self.ix[prefix + 'dtok']]
-				shape = row[get_col('shape', is_ms)][self.ix[prefix + 'dtok']]
+				token = row[get_col('token', is_ms)][self.ix[dtype + '_dtok']]
+				shape = row[get_col('shape', is_ms)][self.ix[dtype + '_dtok']]
 			except IndexError as e:
 				self.debug_report(e, row, i, is_ms)
-				raise
+				token = ''
+				shape = ''
+		temp.set_token(token, shape)
 
-		current_dtype.set_token(token, shape)
-		current_dtype.set_score(0.40, 0.45)  # placeholder
-		# score = row[get_col('score', is_ms)][self.ix[prefix + 'ngram_score']]
-		# nn_score = row[get_col('nn_score', is_ms)][self.ix[prefix + 'nn_score']]
-		# current_dtype.set_score(score, nn_score)
-		return current_dtype
+		try:
+			score = row[get_col('score', is_ms)][self.ix[dtype + '_dtok']]
+			nn_score = row[get_col('nn_score', is_ms)][self.ix[dtype + '_dtok']]
+		except IndexError as e:
+			self.debug_report(e, row, i, is_ms)
+			score = 0.01
+			nn_score = 0.01
+		temp.set_score(score, nn_score)
+
+		return temp
 
 	def process_error(self, i, row, label, current):
 		# add basic info if it's a new error
@@ -186,11 +174,14 @@ class GenerateError:
 		if util.is_ms(label) or util.non_error(label):
 			if not self.flags.ms_split:
 				current.ms = self.process_helper(i, row, current.ms)
-
+				# mark if it's a special case - deletion at an edge
+				if label == 'DEL' and (self.ix['ann'] == 0 or self.ix['ann'] == len(row['comb_ann'])-1):
+					current.del_edge = True
 		return current
 
 	def debug_report(self, e, row, i, ms=True):
 		"""in case of indexing error, includes some useful info"""
+		print('INDEX ERROR!!!!!!!!!!!!')
 		print('Index: {}'.format(i))
 
 		if ms:
@@ -199,8 +190,8 @@ class GenerateError:
 			label = 'ptb'
 
 		print('{} data error at alignment: {}'.format(label, row['comb_ann']))
-		print('PTB Name: {}\n IndexTok: {}'.format(row[get_col('name', ms=False)], self.ix['ptb']))
-		print('PTB Sentence: {}\n IndexDtok: {}'.format(row[get_col('token', ms=False)], self.ix['ptb_dtok']))
+		print('PTB Name: {}\n IndexTok: {}'.format(row[get_col('name', is_ms=False)], self.ix['ptb']))
+		print('PTB Sentence: {}\n IndexDtok: {}'.format(row[get_col('token', is_ms=False)], self.ix['ptb_dtok']))
 		print('MS Name: {}\n IndexTok: {}'.format(row[get_col('name')], self.ix['ms']))
 		print('MS Sentence: {}\n IndexDtok: {}'.format(row[get_col('token')], self.ix['ms_dtok']))
 
