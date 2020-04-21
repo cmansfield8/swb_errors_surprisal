@@ -7,9 +7,10 @@ This file expects the alignment which does not have weird duplicate quotation ma
 Run this first:
 sed -r "/'\"+([a-z]+)\"+'/ s//'\1'/g" $INPUT > $OUTPUT
 
-cont        match stylistic differences in ptb and ms.  It updates the ptb tokens
-            AND the combined, leaving behind a CONT marker so you know things
-            were updated there.
+cont        Match stylistic differences in ptb and ms.  It updates the ptb tokens
+            AND the combined tokens, leaving behind a CONT marker so you know things
+            were updated there. This includes fixing the annotations to ignore
+            differences between WANT TO and GOING TO.
 detokenize  'you_know' and CONTRACTIONS are joined.  WANT TO and GOING to are never
             joined.
 """
@@ -26,20 +27,20 @@ def update_ids(sent, tok_ids):
     result = list()
     i = 1
     while i <= len(sent):
-        current = (sent[i-1], sent[i]) if i < len(sent) else None
+        current = (sent[i - 1], sent[i]) if i < len(sent) else None
         if current and current[0] == '---':
             result.append('None')
         elif current == YOU_KNOW:
-            result.append(tok_ids[i-1] + '_a')
+            result.append(tok_ids[i - 1] + '_a')
             result.append(tok_ids[i] + '_b')
             i += 1  # skip ahead since appending at i
         elif current in REDUCED and \
-                tok_ids[i-1].endswith('_a') and tok_ids[i].endswith('_b'):
-            result.append(tok_ids[i-1] + '0')
+                tok_ids[i - 1].endswith('_a') and tok_ids[i].endswith('_b'):
+            result.append(tok_ids[i - 1] + '0')
             result.append(tok_ids[i] + '0')
             i += 1  # skip ahead since appending at i
         else:
-            result.append(tok_ids[i-1])
+            result.append(tok_ids[i - 1])
         i += 1
     return result
 
@@ -61,22 +62,24 @@ def update_cont(row):
         ix = defaultdict(int)
         ix['ptb'], ix['ms'] = 0, 0
         temp = defaultdict(list)
+
         for i in range(len(row['comb_ann'])):
             label = row['comb_ann'][i]
-            # keep the ptb version for all normal ptb labels except CONT
+            # the ptb tokens stay as is if it's not a CONT
             if util.is_ptb(label) and label != 'CONT_TREE':
                 temp['sent'].append(row['sentence'][ix['ptb']])
                 temp['names'].append(row['names'][ix['ptb']])
-            # use the CONT version from MS for PTB
+            # an MS cont is added to the ptb tokens (cont_ms uses a CONT annotation)
             if label == 'CONT_MS':
                 temp['sent'].append(row['ms_sentence'][ix['ms']])
                 temp['names'].append(row['ms_names'][ix['ms']])
                 temp['comb'].append(row['comb_sentence'][i])
                 temp['ann'].append('CONT')
-            # combined versions are the same except CONT for PTB is deleted
+            # for all normal labels, keep annotation the same (cont_tree has no annotation)
             if not label.startswith('CONT'):
                 temp['comb'].append(row['comb_sentence'][i])
                 temp['ann'].append(row['comb_ann'][i])
+
             # move indices forward
             if util.is_ptb(label):
                 ix['ptb'] += 1
@@ -89,6 +92,27 @@ def update_cont(row):
     return row
 
 
+def update_reductions(row):
+    pattern1 = ['going', 'to', 'going', 'to']
+    pattern2 = ['want', 'to', 'want', 'to']
+    target = ['SUB_MS', 'SUB_MS', 'SUB_TREE', 'INS']
+    temp = defaultdict(list)
+    i = 0
+    while i < len(row['comb_ann']):
+        if i + 4 < len(row['comb_ann']) and row['comb_ann'][i:i+4] == target \
+                and row['comb_sentence'][i:i+4] == pattern1 or row['comb_sentence'][i:i+4] == pattern2:
+            temp['ann'].extend(['CONT', 'CONT'])
+            temp['comb'].extend([row['comb_sentence'][i], row['comb_sentence'][i+1]])
+            i += 3
+        else:
+            temp['ann'].append(row['comb_ann'][i])
+            temp['comb'].append(row['comb_sentence'][i])
+        i += 1
+    row['comb_ann'] = temp['ann']
+    row['comb_sentence'] = temp['comb']
+    return row
+
+
 def detokenize(row, sent_col, tok_ids_col):
     if any([(x.endswith('_a') or x == 'None') for x in row[tok_ids_col]]):
         temp = list()
@@ -97,11 +121,11 @@ def detokenize(row, sent_col, tok_ids_col):
             label = row[tok_ids_col][i]
             if label.endswith('_a'):
                 # join 'you' 'know' tokens with an underscore
-                if row[sent_col][i] == 'you' and row[sent_col][i+1] == 'know':
+                if row[sent_col][i] == 'you' and row[sent_col][i + 1] == 'know':
                     temp.append(row[sent_col][i] + '_' + row[sent_col][i + 1])
                 # join contractions
                 else:
-                    temp.append(row[sent_col][i]+row[sent_col][i+1])
+                    temp.append(row[sent_col][i] + row[sent_col][i + 1])
                 i += 1
             elif label != 'None':
                 temp.append(row[sent_col][i])
@@ -122,6 +146,7 @@ def preprocess(args):
     if args.cont:
         print('Updating style differences')
         df = df.apply(lambda x: update_cont(x), axis=1)
+        df = df.apply(lambda x: update_reductions(x), axis=1)
 
     if args.detokenize:
         print('Detokenizing values')
