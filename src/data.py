@@ -117,7 +117,7 @@ def merge_score(alignments, file):
 	return df
 
 
-def merge_models(align, config):
+def merge_models(align, config, logger):
 	data_path = os.path.join(config['project_dir'], 'data')
 	ptb_tags_file = os.path.join(data_path, 'swbd_ptb_tags.tsv')
 	ms_tags_file = os.path.join(data_path, 'swbd_ms_tags.tsv')
@@ -139,12 +139,18 @@ def merge_models(align, config):
 	ms_gru.rename(columns={'scores': 'ms_scores-gru'}, inplace=True)
 
 	ix_cols = ['file', 'speaker', 'turn', 'sent_num']
+	logger.info('Size before merge: {}'.format(str(align.shape[0])))
 	align = align.merge(ptb_tags, on=ix_cols)
 	align = align.merge(ms_tags, on=ix_cols)
+	logger.info('Size after tag merge: {}'.format(str(align.shape[0])))
 	align = align.merge(ptb_ngram, on=ix_cols)
+	logger.info('Size after ptb ngram merge: {}'.format(str(align.shape[0])))
 	align = align.merge(ms_ngram, on=ix_cols)
+	logger.info('Size after ms ngram merge: {}'.format(str(align.shape[0])))
 	align = align.merge(ptb_gru, on=ix_cols)
+	logger.info('Size after ptb gru merge: {}'.format(str(align.shape[0])))
 	align = align.merge(ms_gru, on=ix_cols)
+	logger.info('Size after ms gru merge: {}'.format(str(align.shape[0])))
 	return align
 
 
@@ -165,7 +171,7 @@ def preprocess(config, logger):
 	# merge the scores and tags
 	logger.info('Merging scores and tags to alignments')
 	align['file_num'] = align['file'].astype(str).str.slice(2, -6)
-	align = merge_models(align, config)
+	align = merge_models(align, config, logger)
 
 	# make sure all the lengths of tags and scores match the index
 	logger.info('Verify indices of tags and scores')
