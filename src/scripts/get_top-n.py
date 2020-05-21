@@ -11,11 +11,12 @@ import pandas as pd
 
 sys.path.append("..")
 from data import read_tsv
+import pickle
 
 
 class Main:
 
-    def __init__(self, alignments_file, output_file, top=200):
+    def __init__(self, alignments_file, output_file, top=100):
         print("Reading alignments", flush=True, end='\n')
         df = read_tsv(alignments_file)
 
@@ -27,18 +28,12 @@ class Main:
                 if word != "//" and word != "--":
                     counts[word] += 1
 
-        print("Writing top {}".format(top), flush=True, end='\n')
-        with open(output_file, 'w+') as output:
-            output.write('word\tcount')
-            output.write('\n')
-            for word, count in counts.most_common(top):
-                output.write('{}\t{}'.format(word, count))
-                output.write('\n')
-
+        results = [x for x, _ in counts.most_common(top)]
+        pickle.dump(set(results), open(out, 'wb'))
         print("Complete!")
 
 
 if __name__ == "__main__":
     align = "/mnt//d//projects//swb_errors_surprisal//exp2//data//swbd_cont.tsv"
-    out = "top-n.tsv"
+    out = "top-n.P"
     Main(align, out)

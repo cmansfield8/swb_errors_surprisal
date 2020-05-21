@@ -66,19 +66,26 @@ def get_sup_diff(l1, l2):
 
 
 def ms_labels():
-	return ['DEL', 'SUB_MS', 'CONT_MS']
+	return {'DEL', 'SUB_MS', 'CONT_MS'}
 
 
 def ptb_labels():
-	return ['INS', 'SUB_TREE', 'CONT_TREE']
+	return {'INS', 'SUB_TREE', 'CONT_TREE'}
 
 
-def err_labels():
-	return ['INS', 'DEL', 'SUB_TREE', 'SUB_MS']
+def err_labels(dtype):
+	if dtype == 'ptb':
+		return {'INS', 'SUB_TREE', 'SUB_MS'}
+	else:
+		return {'DEL', 'SUB_TREE', 'SUB_MS'}
 
 
-def non_error(label):
-	return label == 'O' or label == 'CONT'
+#def err_labels():
+#	return {'INS', 'DEL', 'SUB_TREE', 'SUB_MS'}
+
+
+def non_error():
+	return {'O', 'CONT'}
 
 
 def get_norm_label():
@@ -86,8 +93,8 @@ def get_norm_label():
 
 
 def is_ptb(label):
-	return label in ptb_labels() or non_error(label)
+	return label in ptb_labels() or label in non_error()
 
 
 def is_ms(label):
-	return label in ms_labels() or non_error(label)
+	return label in ms_labels() or label in non_error()

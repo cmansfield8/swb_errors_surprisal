@@ -23,30 +23,30 @@ class Lex(Enum):
 	CON = 1
 	DISC = 2
 	OTHER = 3
-	
+
 
 class Trans:
 
 	def __init__(self):
 		self.tokens = list()
-		self.shapes = list()
 		self.nn_scores = list()
 		self.ngram_scores = list()
+		self.shapes = list()
+		self.disf = list()
 
-	def summarize_shape(self):
-		if len(set(self.shapes[:-1])) == 1:
-			return self.shapes[0]
-		return Lex.MIX.name
-		
-	def set_token(self, token, shape, split=False):
+	def set_token(self, token, shape, disf, split=False):
 		if not split:
 			self.tokens.append(token)
 		self.shapes.append(Lex(int(shape)).name)
-		
+		self.set_disf(disf)
+
 	def set_score(self, ngram_value, nn_value):
 		self.ngram_scores.append(ngram_value)
 		self.nn_scores.append(nn_value)
-		
+
+	def set_disf(self, disf):
+		self.disf.append(disf)
+
 	def get_header(self, dtype):
 		if dtype == 'ptb':
 			prefix = ''
@@ -57,57 +57,84 @@ class Trans:
 		
 	def get_values(self):
 		return list(self.__dict__.values())
-	
+
 
 class ErrSeq:
 
 	def __init__(self):
 		self.index = None
 		self.transcriber = None
-		self.avg_type = None
+		self.error_type = None
 		self.avg_shape = None
 		self.sup = None
 		self.nn_sup = None
-		self.error_type = list()
+		self.top_n = None
+		self.disf = False
+		self.disf_prev = False
+		self.disf_next = False
 		self.del_edge = False
+		self.types = list()
+
 		self.ptb = Trans()
 		self.ms = Trans()
-		
-	def _summarize_type(self):
-		if 'SUB_MS' in self.error_type:
-			self.avg_type = Err.SUB.name
-		elif Err.DEL.name in self.error_type:
-			self.avg_type = Err.DEL.name
-		elif Err.INS.name in self.error_type:
-			self.avg_type = Err.INS.name
-			
-	def _summarize_shape(self):
-		avg_ptb = self.ptb.summarize_shape()
-		avg_ms = self.ms.summarize_shape()
-		if self.avg_type == Err.INS.name or avg_ptb == avg_ms:
-			self.avg_shape = avg_ptb
-		elif self.avg_type == Err.DEL.name:
-			self.avg_shape = avg_ms
+
+	def _summarize_shape(self, shapes):
+		if len(set(shapes[:-1])) == 1:
+			self.avg_shape = shapes[0]
 		else:
 			self.avg_shape = Lex.MIX.name
 
-	def _get_suprisal_value(self):
-		s1, s2 = self.ptb, self.ms
+	def _summarize_type(self):
+		if 'SUB_MS' in self.types:
+			self.error_type = Err.SUB.name
+		elif 'DEL' in self.types:
+			self.error_type = Err.DEL.name
+		else:
+			self.error_type = Err.INS.name
+
+	def _get_surprisal_value(self, dtype):
+		if dtype == 'ptb':
+			s1, s2 = self.ptb, self.ms
+		else:
+			s1, s2 = self.ms, self.ptb
 		self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
 		self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
 
-	def make_summary(self):
+	def _check_top_n(self, tokens, top_n):
+		if len(tokens) == 2 and tokens[0] in top_n:
+			self.top_n = tokens[0]
+		else:
+			self.top_n = False
+
+	def _set_disfluencies(self, disfluencies):
+		nondisf = {'C', 'O'}
+		temp = [x not in nondisf for x in disfluencies]
+		endpoint = len(disfluencies)-1
+		if temp[0]:
+			self.disf_prev = True
+		if endpoint > 1 and any(temp[1:endpoint-1]):
+			self.disf = True
+		if temp[endpoint]:
+			self.disf_next = True
+
+	def make_summary(self, top_n, dtype):
+		if dtype == 'ptb':
+			temp = self.ptb
+		else:
+			temp = self.ms
 		self._summarize_type()
-		self._summarize_shape()
-		self._get_suprisal_value()
+		self._summarize_shape(temp.shapes)
+		self._set_disfluencies(temp.disf)
+		self._check_top_n(temp.tokens, top_n)
+		self._get_surprisal_value(dtype)
 	
 	def add_type(self, value):
-		self.error_type.append(value)
+		self.types.append(value)
 
-	# does not include ptb and ms Trans objects
+	# does not include list or ptb and ms Trans objects
 	def get_header(self):
 		return list(self.__dict__.keys())[:-2]
 
-	# does not include ptb and ms Trans objects
+	# does not include list or ptb and ms Trans objects
 	def get_values(self):
 		return list(self.__dict__.values())[:-2]
