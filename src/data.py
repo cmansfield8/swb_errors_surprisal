@@ -188,7 +188,7 @@ def preprocess(config, logger):
 	logger.debug(align.columns)
 	logger.debug(align.shape)
 
-	output = os.path.join(config['project_dir'], "data.P")
+	output = os.path.join(config['project_dir'], 'data.P')
 	align.to_pickle(output)
 	logger.info('Data written to: {}'.format(output))
 	return align
@@ -196,7 +196,7 @@ def preprocess(config, logger):
 	
 def load_data(config, logger):
 	data_file = os.path.join(config['project_dir'], 'data.P')
-	
+
 	if os.path.exists(data_file):
 		logger.info('Loading {}'.format(data_file))
 		alignments = pickle.load(open(data_file, 'rb'))
@@ -215,7 +215,7 @@ def sample_results(results, i):
 
 
 def write_tsv(config, logger, results):
-	output = os.path.join(config['project_dir'], 'swbd_errors.tsv')
+	output = os.path.join(config['project_dir'], 'swbd_errors_' + config['dtype'] + '.tsv')
 	
 	logger.info('Writing results file to {}'.format(output))
 	writer = csv.writer(open(output, 'w'), delimiter='\t')

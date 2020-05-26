@@ -5,7 +5,6 @@ Pull errors from alignment with their surprisal LLR and various features.
 
 """
 
-
 import argparse
 from collections import defaultdict
 import pickle
@@ -30,8 +29,7 @@ def get_col(datatype, dtype):
 		('ms', 'score'): 'ms_scores-ngram',
 		('ptb', 'nn_score'): 'scores-gru',
 		('ms', 'nn_score'): 'ms_scores-gru',
-		('ms', 't-token'): 'ms_sentence',  # tokenized ms sentence
-		('ptb', 'disf'): 'tag',
+		('ptb', 'disf'): 'disfl',
 		('ms', 'disf'): 'ms_disfl'
 	}
 	return d[(data, datatype)]
@@ -63,7 +61,7 @@ class GenerateError:
 		alignment = data.load_data(config, self.logger)
 		self.logger.info('Processing errors...')
 
-		result = list()	 # list of structured error objects
+		result = list()  # list of structured error objects
 		top_n = self.get_top_word()
 
 		# for each utterance
@@ -93,7 +91,8 @@ class GenerateError:
 
 				if not self.flags.special_tok:
 					# a new error or another error in current error sequence
-					if label in util.err_labels(config['dtype']):
+					if (not self.flags.prev_error and label in util.err_labels(config['dtype'])) or \
+						(self.flags.prev_error and label in util.err_labels()):
 						current = self.process_error(i, row, label, current)
 						self.flags.prev_error = True
 
@@ -130,7 +129,6 @@ class GenerateError:
 				result.append(current)
 
 		self.logger.info('Error sequences found: {}'.format(str(len(result))))
-
 		data.write_tsv(config, self.logger, result)
 
 	def process_helper(self, i, row, temp, dtype):
@@ -143,25 +141,26 @@ class GenerateError:
 			try:
 				token = row[get_col('token', dtype)][self.ix[dtype + '_dtok']]
 				shape = row[get_col('shape', dtype)][self.ix[dtype + '_dtok']]
-				if row[get_col('disf', dtype)]:  # IF DISFLUENCY INFO IS PRESENT - TEMP DUE TO BUG
-					disf = row[get_col('disf', dtype)][self.ix[dtype + '_disf']]  # disfluency is mapped to tokenized version
+				disf = row[get_col('disf', dtype)][self.ix[dtype + '_disf']]
 				# handle previous disfluencies
-				if row[get_col('disf', dtype)]:  # IF DISFLUENCY INFO IS PRESENT - TEMP DUE TO BUG
-					if not self.flags.prev_error:
-						prev_disf = 'O'
-						if self.ix[dtype + '_disf'] > 1:
-							prev_disf = row[get_col('disf', dtype)][self.ix[dtype + '_disf'] - 1]
-						temp.set_disf(prev_disf)
+				if not temp.disf:
+					prev_disf = 'O'
+					disf_ix = self.ix[dtype + '_disf']
+					if disf_ix > 1:
+						if row[get_col('name', dtype)][self.ix[dtype]].endswith('_b'):  # check if it's a split
+							disf_ix -= 1
+						prev_disf = row[get_col('disf', dtype)][disf_ix - 1]
+					temp.set_disf(prev_disf)
 			except IndexError as e:
 				self.debug_report(e, row, i, dtype)
 				token = ''
 				shape = ''
-				disf = ''
-		temp.set_token(token, shape, disf)
+		temp.set_token(token, shape)
 
 		try:
 			score = row[get_col('score', dtype)][self.ix[dtype + '_dtok']]
 			nn_score = row[get_col('nn_score', dtype)][self.ix[dtype + '_dtok']]
+			temp.set_disf(disf)
 		except IndexError as e:
 			self.debug_report(e, row, i, dtype)
 			score = 0.01
@@ -172,7 +171,7 @@ class GenerateError:
 
 	def process_error(self, i, row, label, current):
 		# add basic info if it's a new error
-		if not self.flags.prev_error:
+		if not current.index:
 			current.index = i
 			current.transcriber = row['transcriber']
 
@@ -189,7 +188,7 @@ class GenerateError:
 			if not self.flags.ms_split:
 				current.ms = self.process_helper(i, row, current.ms, 'ms')
 				# mark if it's a special case - deletion at an edge
-				if label == 'DEL' and (self.ix['ann'] == 0 or self.ix['ann'] == len(row['comb_ann'])-1):
+				if label == 'DEL' and (self.ix['ann'] == 0 or self.ix['ann'] == len(row['comb_ann']) - 1):
 					current.del_edge = True
 		return current
 
@@ -206,10 +205,18 @@ class GenerateError:
 		self.logger.debug('INDEX ERROR {}'.format(e))
 		self.logger.debug('Index: {}'.format(i))
 		self.logger.debug('{} data error at alignment: {}'.format(dtype, row['comb_ann']))
-		self.logger.debug('PTB Disf: {}\nLen: {} IndexTok: {}'.format(row[get_col('disf', 'ptb')], len(row[get_col('disf', 'ptb')]), self.ix['ptb']))
-		self.logger.debug('PTB Sentence: {}\nLen: {} IndexDtok: {}'.format(row[get_col('token', 'ptb')], len(row[get_col('token', 'ptb')]), self.ix['ptb_dtok']))
-		self.logger.debug('MS Disf: {}\nLen: {} IndexTok: {}'.format(row[get_col('disf', 'ms')], len(row[get_col('disf', 'ms')]), self.ix['ms']))
-		self.logger.debug('MS Sentence: {}\nLen: {} IndexDtok: {}'.format(row[get_col('token', 'ms')], len(row[get_col('token', 'ms')]), self.ix['ms_dtok']))
+		self.logger.debug(
+			'PTB Disf: {}\nLen: {} IndexTok: {}'.format(row[get_col('disf', 'ptb')], len(row[get_col('disf', 'ptb')]),
+														self.ix['ptb']))
+		self.logger.debug('PTB Sentence: {}\nLen: {} IndexDtok: {}'.format(row[get_col('token', 'ptb')],
+																		   len(row[get_col('token', 'ptb')]),
+																		   self.ix['ptb_dtok']))
+		self.logger.debug(
+			'MS Disf: {}\nLen: {} IndexTok: {}'.format(row[get_col('disf', 'ms')], len(row[get_col('disf', 'ms')]),
+													   self.ix['ms']))
+		self.logger.debug('MS Sentence: {}\nLen: {} IndexDtok: {}'.format(row[get_col('token', 'ms')],
+																		  len(row[get_col('token', 'ms')]),
+																		  self.ix['ms_dtok']))
 
 
 if __name__ == "__main__":

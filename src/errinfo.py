@@ -14,6 +14,7 @@ class Err(Enum):
 	INS = 0
 	DEL = 1
 	SUB = 2
+	MIX = 3
 
 	
 class Lex(Enum):
@@ -34,18 +35,17 @@ class Trans:
 		self.shapes = list()
 		self.disf = list()
 
-	def set_token(self, token, shape, disf, split=False):
+	def set_token(self, token, shape, split=False):
 		if not split:
 			self.tokens.append(token)
 		self.shapes.append(Lex(int(shape)).name)
-		self.set_disf(disf)
 
 	def set_score(self, ngram_value, nn_value):
 		self.ngram_scores.append(ngram_value)
 		self.nn_scores.append(nn_value)
 
-	def set_disf(self, disf):
-		self.disf.append(disf)
+	def set_disf(self, d):
+		self.disf.append(d)
 
 	def get_header(self, dtype):
 		if dtype == 'ptb':
@@ -85,12 +85,15 @@ class ErrSeq:
 			self.avg_shape = Lex.MIX.name
 
 	def _summarize_type(self):
-		if 'SUB_MS' in self.types:
+		t = set(self.types)
+		if 'INS' not in t and 'DEL' not in t:
 			self.error_type = Err.SUB.name
-		elif 'DEL' in self.types:
+		elif 'SUB_MS' not in t and 'DEL' not in t:
+			self.error_type = Err.INS.name
+		elif 'SUB_MS' not in t and 'INS' not in t:
 			self.error_type = Err.DEL.name
 		else:
-			self.error_type = Err.INS.name
+			self.error_type = Err.MIX.name
 
 	def _get_surprisal_value(self, dtype):
 		if dtype == 'ptb':
@@ -106,16 +109,17 @@ class ErrSeq:
 		else:
 			self.top_n = False
 
-	def _set_disfluencies(self, disfluencies):
+	def _set_disfluencies(self, disfluencies, temp):
 		nondisf = {'C', 'O'}
 		temp = [x not in nondisf for x in disfluencies]
 		endpoint = len(disfluencies)-1
 		if temp[0]:
 			self.disf_prev = True
-		if endpoint > 1 and any(temp[1:endpoint-1]):
+		if endpoint > 0 and any(temp[1:endpoint]):
 			self.disf = True
-		if temp[endpoint]:
+		if endpoint > 0 and temp[endpoint]:
 			self.disf_next = True
+
 
 	def make_summary(self, top_n, dtype):
 		if dtype == 'ptb':
@@ -124,17 +128,18 @@ class ErrSeq:
 			temp = self.ms
 		self._summarize_type()
 		self._summarize_shape(temp.shapes)
-		self._set_disfluencies(temp.disf)
+		self._set_disfluencies(temp.disf, temp)
 		self._check_top_n(temp.tokens, top_n)
 		self._get_surprisal_value(dtype)
-	
+
+
 	def add_type(self, value):
 		self.types.append(value)
 
 	# does not include list or ptb and ms Trans objects
 	def get_header(self):
-		return list(self.__dict__.keys())[:-2]
+		return list(self.__dict__.keys())[:12]
 
 	# does not include list or ptb and ms Trans objects
 	def get_values(self):
-		return list(self.__dict__.values())[:-2]
+		return list(self.__dict__.values())[:12]
