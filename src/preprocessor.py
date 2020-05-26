@@ -60,7 +60,7 @@ def update_names(row, sent_col, tok_ids_col):
 def update_cont(row):
     if 'CONT_MS' in set(row['comb_ann']):
         ix = defaultdict(int)
-        ix['ptb'], ix['ms'] = 0, 0
+        ix['ptb'], ix['ms'], ix['ptb_disfl'] = 0, 0, 0
         temp = defaultdict(list)
 
         for i in range(len(row['comb_ann'])):
@@ -69,10 +69,16 @@ def update_cont(row):
             if util.is_ptb(label) and label != 'CONT_TREE':
                 temp['sent'].append(row['sentence'][ix['ptb']])
                 temp['names'].append(row['names'][ix['ptb']])
+                if not row['names'][ix['ptb']] == 'None':
+                    try:
+                        temp['disfl'].append(row['disfl'][ix['ptb_disfl']])
+                    except IndexError:  # this catches one edge case where 'None' is at EOS
+                        temp['disfl'].append(row['disfl'][ix['ptb_disfl']-1])
             # an MS cont is added to the ptb tokens (cont_ms uses a CONT annotation)
             if label == 'CONT_MS':
                 temp['sent'].append(row['ms_sentence'][ix['ms']])
                 temp['names'].append(row['ms_names'][ix['ms']])
+                temp['disfl'].append(row['disfl'][ix['ptb_disfl']])  # keep the original ptb disfluency
                 temp['comb'].append(row['comb_sentence'][i])
                 temp['ann'].append('CONT')
             # for all normal labels, keep annotation the same (cont_tree has no annotation)
@@ -82,9 +88,13 @@ def update_cont(row):
 
             # move indices forward
             if util.is_ptb(label):
+                if ix['ptb'] < len(row['names']) and not row['names'][ix['ptb']] == 'None':
+                    ix['ptb_disfl'] += 1
                 ix['ptb'] += 1
             if util.is_ms(label):
                 ix['ms'] += 1
+
+        row['disfl'] = temp['disfl']
         row['sentence'] = temp['sent']
         row['names'] = temp['names']
         row['comb_ann'] = temp['ann']
