@@ -9,18 +9,22 @@ https://github.com/vickyzayats/switchboard_corrected_reannotated
 2. Run pre-processing on the alignments:
 
 sed -r "/'\"+([a-z]+)\"+'/ s//'\1'/g" $INPUT > $OUTPUT
-python src/scripts/preprocess.py -cd alignments_file processed_file
+python src/scripts/preprocessor.py -cd switchboard_corrected_reannotated processed_file
 
-3. Run POS tagger and scripts: 
+3A. Train POS tagger and decode on the alignments. See: 
 
 https://github.com/cmansfield8/NCRFpp
 
-4. Add LM scores (more on that later)
+3B. Fetch formatted tags files.  From the NCRFpp repo:
+
+python utils/swb_processing/postprocess.py ncrfpp_output processed_file output_file {ptb, ms}
+
+4.  Fetch LM scores files. See:
+
+https://github.com/cmansfield8/lm_examples
 
 5. Add config file (see /exp1/) and run main
 
 python src/main.py config_file
-
-6. Finished!
 
 Returns error list and surprisal scores for analysis.
