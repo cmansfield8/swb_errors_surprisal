@@ -91,8 +91,7 @@ class GenerateError:
 
 				if not self.flags.special_tok:
 					# a new error or another error in current error sequence
-					if (not self.flags.prev_error and label in util.err_labels(config['dtype'])) or \
-						(self.flags.prev_error and label in util.err_labels()):
+					if label in util.err_labels():
 						current = self.process_error(i, row, label, current)
 						self.flags.prev_error = True
 
@@ -101,7 +100,7 @@ class GenerateError:
 						current = self.process_error(i, row, label, current)
 						# on to new errors if it's not a split
 						if not self.flags.ptb_split and not self.flags.ms_split:
-							current.make_summary(top_n, config['dtype'])
+							current.summarize(top_n)
 							result.append(current)
 							self.flags.prev_error = False
 							current = ErrSeq()
@@ -125,7 +124,7 @@ class GenerateError:
 				label = util.get_norm_label()
 				self.flags.eos = True
 				current = self.process_error(i, row, label, current)
-				current.make_summary(top_n, config['dtype'])
+				current.summarize(top_n)
 				result.append(current)
 
 		self.logger.info('Error sequences found: {}'.format(str(len(result))))

@@ -155,7 +155,6 @@ def merge_models(align, config, logger):
 
 
 def preprocess(config, logger):
-
 	# load files
 	alignments_file = os.path.join(config['project_dir'], 'data', config['alignments_file'])
 	logger.info('Loading {}'.format(alignments_file))
@@ -203,19 +202,10 @@ def load_data(config, logger):
 		return alignments
 	else:
 		return preprocess(config, logger)
-		
-
-def sample_results(results, i):
-	header = [i for i in itertools.chain(results[i].get_header(), results[i].ptb.get_header('ptb'), results[i].ms.get_header('ms'))]
-	header = ' '.join(header)
-	value = [i for i in itertools.chain(results[i].get_values(), results[i].ptb.get_values(), results[i].ms.get_values())]
-	value = ' '.join(value)
-
-	return header + '\n' + value
 
 
 def write_tsv(config, logger, results):
-	output = os.path.join(config['project_dir'], 'swbd_errors_' + config['dtype'] + '.tsv')
+	output = os.path.join(config['project_dir'], 'swbd_errors.tsv')
 	
 	logger.info('Writing results file to {}'.format(output))
 	writer = csv.writer(open(output, 'w'), delimiter='\t')

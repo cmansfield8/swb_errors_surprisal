@@ -30,10 +30,17 @@ class Trans:
 
 	def __init__(self):
 		self.tokens = list()
+		self.top_n = None
+		self.shapes = list()
+		self.avg_shape = None
+		self.disf = list()
+		self.disf_current = False
+		self.disf_prev = False
+		self.disf_next = False
 		self.nn_scores = list()
 		self.ngram_scores = list()
-		self.shapes = list()
-		self.disf = list()
+		self.ngram_sup = None
+		self.nn_sup = None
 
 	def set_token(self, token, shape, split=False):
 		if not split:
@@ -46,6 +53,42 @@ class Trans:
 
 	def set_disf(self, d):
 		self.disf.append(d)
+
+	def _summarize_shape(self):
+		if len(self.shapes) > 1:
+			if len(set(self.shapes[:-1])) == 1:
+				self.avg_shape = self.shapes[0]
+			else:
+				self.avg_shape = Lex.MIX.name
+
+	def _get_surprisal_value(self, other):  # if you are calculating it for PTB, then PTB should be self, MS other
+		if len(self.ngram_scores) > 1:
+			self.ngram_sup = util.get_sup_diff(self.ngram_scores, other.ngram_scores)
+			self.nn_sup = util.get_sup_diff(self.nn_scores, other.nn_scores)
+
+	def _check_top_n(self, top_n):
+		if len(self.tokens) == 2 and self.tokens[0] in top_n:
+			self.top_n = self.tokens[0]
+		else:
+			self.top_n = False
+
+	def _set_disfluencies(self):
+		if len(self.disf) > 1:
+			nondisf = {'C', 'O'}
+			temp = [x not in nondisf for x in self.disf]
+			endpoint = len(self.disf)-1
+			if temp[0]:
+				self.disf_prev = True
+			if any(temp[1:endpoint]):
+				self.disf_current = True
+			if temp[endpoint]:
+				self.disf_next = True
+
+	def make_summary(self, top_n, other):
+		self._summarize_shape()
+		self._set_disfluencies()
+		self._check_top_n(top_n)
+		self._get_surprisal_value(other)
 
 	def get_header(self, dtype):
 		if dtype == 'ptb':
@@ -65,24 +108,10 @@ class ErrSeq:
 		self.index = None
 		self.transcriber = None
 		self.error_type = None
-		self.avg_shape = None
-		self.sup = None
-		self.nn_sup = None
-		self.top_n = None
-		self.disf = False
-		self.disf_prev = False
-		self.disf_next = False
 		self.del_edge = False
 		self.types = list()
-
 		self.ptb = Trans()
 		self.ms = Trans()
-
-	def _summarize_shape(self, shapes):
-		if len(set(shapes[:-1])) == 1:
-			self.avg_shape = shapes[0]
-		else:
-			self.avg_shape = Lex.MIX.name
 
 	def _summarize_type(self):
 		t = set(self.types)
@@ -95,51 +124,18 @@ class ErrSeq:
 		else:
 			self.error_type = Err.MIX.name
 
-	def _get_surprisal_value(self, dtype):
-		if dtype == 'ptb':
-			s1, s2 = self.ptb, self.ms
-		else:
-			s1, s2 = self.ms, self.ptb
-		self.sup = util.get_sup_diff(s1.ngram_scores, s2.ngram_scores)
-		self.nn_sup = util.get_sup_diff(s1.nn_scores, s2.nn_scores)
-
-	def _check_top_n(self, tokens, top_n):
-		if len(tokens) == 2 and tokens[0] in top_n:
-			self.top_n = tokens[0]
-		else:
-			self.top_n = False
-
-	def _set_disfluencies(self, disfluencies, temp):
-		nondisf = {'C', 'O'}
-		temp = [x not in nondisf for x in disfluencies]
-		endpoint = len(disfluencies)-1
-		if temp[0]:
-			self.disf_prev = True
-		if endpoint > 0 and any(temp[1:endpoint]):
-			self.disf = True
-		if endpoint > 0 and temp[endpoint]:
-			self.disf_next = True
-
-
-	def make_summary(self, top_n, dtype):
-		if dtype == 'ptb':
-			temp = self.ptb
-		else:
-			temp = self.ms
+	def summarize(self, top_n):
 		self._summarize_type()
-		self._summarize_shape(temp.shapes)
-		self._set_disfluencies(temp.disf, temp)
-		self._check_top_n(temp.tokens, top_n)
-		self._get_surprisal_value(dtype)
-
+		self.ptb.make_summary(top_n, other=self.ms)
+		self.ms.make_summary(top_n, other=self.ptb)
 
 	def add_type(self, value):
 		self.types.append(value)
 
 	# does not include list or ptb and ms Trans objects
 	def get_header(self):
-		return list(self.__dict__.keys())[:12]
+		return list(self.__dict__.keys())[:5]
 
 	# does not include list or ptb and ms Trans objects
 	def get_values(self):
-		return list(self.__dict__.values())[:12]
+		return list(self.__dict__.values())[:5]

@@ -73,13 +73,8 @@ def ptb_labels():
 	return {'INS', 'SUB_TREE', 'CONT_TREE'}
 
 
-def err_labels(dtype=None):
-	if dtype == 'ptb':
-		return {'INS', 'SUB_TREE', 'SUB_MS'}
-	elif dtype == 'ms':
-		return {'DEL', 'SUB_TREE', 'SUB_MS'}
-	else:
-		return {'INS', 'DEL', 'SUB_TREE', 'SUB_MS'}
+def err_labels():
+	return {'INS', 'DEL', 'SUB_TREE', 'SUB_MS'}
 
 
 def non_error():
