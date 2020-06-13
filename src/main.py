@@ -37,18 +37,20 @@ def get_col(datatype, dtype):
 
 class ErrorFlags:
 
-	def __init__(self, special_tok=True, prev_error=False, eos=False, split=False, ms_split=False):
+	def __init__(self, special_tok=True, prev_error=False, eos=False, split=False, ms_split=False, b_split=False):
 		self.special_tok = special_tok
 		self.prev_error = prev_error
 		self.eos = eos
 		self.ptb_split = split
 		self.ms_split = ms_split
+		self.b_split = b_split
 
 	def reset(self):
 		self.special_tok = False
 		self.eos = False
 		self.ptb_split = False
 		self.ms_split = False
+		self.b_split = False
 
 
 class GenerateError:
@@ -88,6 +90,8 @@ class GenerateError:
 					self.flags.ptb_split = True
 				if ms_name.endswith('_a'):
 					self.flags.ms_split = True
+				if name.endswith('_b') != ms_name.endswith('_b'):  # checks if only one of the ptb/ms is a '_b' split
+					self.flags.b_split = True
 
 				if not self.flags.special_tok:
 					# a new error or another error in current error sequence
@@ -98,8 +102,8 @@ class GenerateError:
 					# add the token after the error sequence
 					elif self.flags.prev_error:
 						current = self.process_error(i, row, label, current)
-						# on to new errors if it's not a split
-						if not self.flags.ptb_split and not self.flags.ms_split:
+						# on to new errors if not first part of split or not that one of them is last part of split
+						if not self.flags.ptb_split and not self.flags.ms_split and not self.flags.b_split:
 							current.summarize(top_n)
 							result.append(current)
 							self.flags.prev_error = False
