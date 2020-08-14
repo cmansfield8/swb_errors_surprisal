@@ -45,7 +45,10 @@ class Trans:
 	def set_token(self, token, shape, split=False):
 		if not split:
 			self.tokens.append(token)
-		self.shapes.append(Lex(int(shape)).name)
+		if token.endswith('-'):
+			self.shapes.append(Lex.OTHER.name)
+		else:
+			self.shapes.append(Lex(int(shape)).name)
 
 	def set_score(self, ngram_value, nn_value):
 		self.ngram_scores.append(ngram_value)
