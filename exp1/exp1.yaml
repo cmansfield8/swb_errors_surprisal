@@ -1,7 +1,0 @@
-alignments_file: "C://Users/coman/Projects/swb_errors_surprisal/exp1/data/switchboard_corrected_tagged.tsv"
-score_dir: "C://Users/coman/Projects/swb_errors_surprisal/exp1/data/"
-project_dir: "C://Users/coman/Projects/swb_errors_surprisal/exp1/data/"
-
-metadata_file: "C://Users/coman/Projects/swb_errors_surprisal/data/metadata.csv"
-
-debug: True
