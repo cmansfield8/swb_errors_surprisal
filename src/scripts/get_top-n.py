@@ -34,6 +34,6 @@ class Main:
 
 
 if __name__ == "__main__":
-    align = "/mnt//d//projects//swb_errors_surprisal//exp2//data//swbd_cont.tsv"
+    align = "/mnt//d//projects//swb_errors_surprisal//exp4//data//swbd_cont.tsv"
     out = "top-n.P"
     Main(align, out)
